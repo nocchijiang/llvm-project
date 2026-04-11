@@ -10696,9 +10696,6 @@ AArch64InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
   //
   // FIXME: Allow calls to functions which construct a stack frame, as long
   // as they don't access arguments on the stack.
-  // FIXME: Figure out some way to analyze functions defined in other modules.
-  // We should be able to compute the memory usage based on the IR calling
-  // convention, even if we can't see the definition.
   if (MI.isCall()) {
     // Get the function associated with the call. Look at each operand and find
     // the one that represents the callee and get its name.
@@ -10723,6 +10720,15 @@ AArch64InstrInfo::getOutliningTypeImpl(const MachineModuleInfo &MMI,
     if (MI.getOpcode() == AArch64::BLR ||
         MI.getOpcode() == AArch64::BLRNoIP || MI.getOpcode() == AArch64::BL)
       UnknownCallOutlineType = outliner::InstrType::LegalTerminator;
+
+    // Check call site info first — it is per-call-site and more precise
+    // than inspecting the callee's definition.
+    const MachineFunction *CallerMF = MI.getParent()->getParent();
+    const auto &CSInfoMap = CallerMF->getCallSitesInfo();
+    auto CSIt = CSInfoMap.find(&MI);
+    if (CSIt != CSInfoMap.end())
+      return CSIt->second.HasStackArguments ? UnknownCallOutlineType
+                                            : outliner::InstrType::Legal;
 
     if (!Callee)
       return UnknownCallOutlineType;

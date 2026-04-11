@@ -16,7 +16,7 @@
 ; PRINTER_CGS: name: main
 ; PRINTER_CGS: callSites:
 ; PRINTER_CGS-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], calleeTypeIds:
-; PRINTER_CGS-NEXT: [ 7854600665770582568 ] }
+; PRINTER_CGS-NEXT: [ 7854600665770582568 ], hasStackArguments: false }
 
 
 ;; Test parser.
@@ -26,7 +26,7 @@
 ; PARSER_CGS: name: main
 ; PARSER_CGS: callSites:
 ; PARSER_CGS-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], calleeTypeIds:
-; PARSER_CGS-NEXT: [ 7854600665770582568 ] }
+; PARSER_CGS-NEXT: [ 7854600665770582568 ], hasStackArguments: false }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Test printer and parser with -emit-call-site-info only.
@@ -63,7 +63,7 @@
 ; PRINTER_CGS_CSI: callSites:
 ; PRINTER_CGS_CSI-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs:
 ; PRINTER_CGS_CSI-NEXT: { arg: 0, reg: {{.*}} }, calleeTypeIds:
-; PRINTER_CGS_CSI-NEXT:   [ 7854600665770582568 ] }
+; PRINTER_CGS_CSI-NEXT:   [ 7854600665770582568 ], hasStackArguments: false }
 
 
 ;; Test parser.
@@ -74,7 +74,7 @@
 ; PARSER_CGS_CSI: callSites:
 ; PARSER_CGS_CSI-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs:
 ; PARSER_CGS_CSI-NEXT: { arg: 0, reg: {{.*}} }, calleeTypeIds:
-; PARSER_CGS_CSI-NEXT:   [ 7854600665770582568 ] }
+; PARSER_CGS_CSI-NEXT:   [ 7854600665770582568 ], hasStackArguments: false }
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 

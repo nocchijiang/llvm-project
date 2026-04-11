@@ -10,7 +10,7 @@ define i32 @check_tailcall(ptr %func, i8 %x) !type !0 {
 entry:
   ; CHECK: callSites:
   ; CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], calleeTypeIds:
-  ; CHECK-NEXT: [ 3498816979441845844 ] }
+  ; CHECK-NEXT: [ 3498816979441845844 ], hasStackArguments: false }
   %call = tail call i32 %func(i8 signext %x), !callee_type !1
   ret i32 %call
 }

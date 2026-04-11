@@ -538,6 +538,11 @@ public:
     /// or definition of the target function and might be indirect.
     MDNode *CallTarget = nullptr;
 
+    /// Whether this call passes arguments on the stack. Set by target
+    /// lowering and used by the machine outliner to determine if a call
+    /// can safely appear in the middle of an outlined sequence.
+    bool HasStackArguments = false;
+
     CallSiteInfo() = default;
 
     /// Extracts the numeric type id from the CallBase's callee_type Metadata,

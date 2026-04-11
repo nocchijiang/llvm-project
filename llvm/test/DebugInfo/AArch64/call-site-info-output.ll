@@ -13,7 +13,8 @@
 ; CHECK-NEXT:   - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs:
 ; CHECK-NEXT:       - { arg: 0, reg: '$w0' }
 ; CHECK-NEXT:       - { arg: 1, reg: '$w1' }
-; CHECK-NEXT:       - { arg: 2, reg: '$w2' } }
+; CHECK-NEXT:       - { arg: 2, reg: '$w2' }, hasStackArguments:
+; CHECK-NEXT:     false }
 
 ; ModuleID = 'call-site-info-output.c'
 source_filename = "call-site-info-output.c"

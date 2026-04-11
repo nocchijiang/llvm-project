@@ -1,13 +1,16 @@
 ;; Tests that callee_type metadata attached to direct call sites are safely ignored.
 
-; RUN: llc --call-graph-section -mtriple riscv64 < %s -stop-after=finalize-isel -o - | FileCheck --match-full-lines %s
-; RUN: llc --call-graph-section -mtriple riscv32 < %s -stop-after=finalize-isel -o - | FileCheck --match-full-lines %s
+; RUN: llc --call-graph-section -mtriple riscv64 < %s -stop-after=finalize-isel -o - | FileCheck %s
+; RUN: llc --call-graph-section -mtriple riscv32 < %s -stop-after=finalize-isel -o - | FileCheck %s
 
 ;; Test that `calleeTypeIds` field is not present in `callSites`
 ; CHECK-LABEL: callSites:
-; CHECK-NEXT: - { bb: {{[0-9]+}}, offset: {{[0-9]+}}, fwdArgRegs: [] }
-; CHECK-NEXT: - { bb: {{[0-9]+}}, offset: {{[0-9]+}}, fwdArgRegs: [] }
-; CHECK-NEXT: - { bb: {{[0-9]+}}, offset: {{[0-9]+}}, fwdArgRegs: [] }
+; CHECK-NEXT: - { bb: {{[0-9]+}}, offset: {{[0-9]+}}, fwdArgRegs: [], hasStackArguments:
+; CHECK-NEXT: false }
+; CHECK: - { bb: {{[0-9]+}}, offset: {{[0-9]+}}, fwdArgRegs: [], hasStackArguments:
+; CHECK-NEXT: false }
+; CHECK: - { bb: {{[0-9]+}}, offset: {{[0-9]+}}, fwdArgRegs: [], hasStackArguments:
+; CHECK-NEXT: false }
 define i32 @foo(i32 %x, i32 %y) !type !0 {
 entry:
   ;; Call instruction with accurate callee_type.

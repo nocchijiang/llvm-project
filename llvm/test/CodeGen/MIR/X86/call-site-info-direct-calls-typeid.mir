@@ -2,15 +2,18 @@
 # `CalleeTypeId` is used for propagating call site type identifiers for
 # indirect targets only. This test does not contain any indirect targets.
 
-# RUN: llc -mtriple=x86_64 --call-graph-section %s -run-pass=none -o - | FileCheck --match-full-lines %s
+# RUN: llc -mtriple=x86_64 --call-graph-section %s -run-pass=none -o - | FileCheck %s
 # CHECK-NOT: calleeTypeIds
 # CHECK: name: bar
 # CHECK: callSites:
-# CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [] }
-# CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [] }
+# CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], hasStackArguments:
+# CHECK-NEXT: false }
+# CHECK: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], hasStackArguments:
+# CHECK-NEXT: false }
 # CHECK: name: foo
 # CHECK: callSites:
-# CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [] }
+# CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], hasStackArguments:
+# CHECK-NEXT: false }
 
 --- |
   declare i32 @fizz(i32, i32)

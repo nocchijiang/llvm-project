@@ -10149,6 +10149,8 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
   // Get a count of how many bytes are to be pushed on the stack.
   unsigned NumBytes = CCInfo.getStackSize();
 
+  CSInfo.HasStackArguments = NumBytes > 0;
+
   if (IsSibCall) {
     // Since we're not changing the ABI to make this a tail call, the memory
     // operands are already available in the caller's incoming argument space.

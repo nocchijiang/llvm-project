@@ -5,7 +5,7 @@
 # CHECK: name: call_foo
 # CHECK: callSites:
 # CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], calleeTypeIds:
-# CHECK-NEXT: [ 123456789 ] }
+# CHECK-NEXT: [ 123456789 ], hasStackArguments: false }
 
 --- |
   define i32 @call_foo() {
@@ -21,7 +21,7 @@
 ---
 name:            call_foo
 callSites:
-  - { bb: 0, offset: 0, fwdArgRegs: [], calleeTypeIds: [ 123456789 ] }
+  - { bb: 0, offset: 0, fwdArgRegs: [], calleeTypeIds: [ 123456789 ], hasStackArguments: false }
 body:             |
   bb.0.entry:    
     CALL64m $noreg, 1, $noreg, 0, $noreg, csr_64, implicit $rsp, implicit $ssp, implicit $edi, implicit-def $rsp, implicit-def $ssp :: (load (s64) from `ptr null`)

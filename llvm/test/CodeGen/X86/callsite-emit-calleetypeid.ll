@@ -8,7 +8,7 @@
 ; CHECK: name: main
 ; CHECK: callSites:
 ; CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: [], calleeTypeIds:
-; CHECK-NEXT: [ 7854600665770582568 ] }
+; CHECK-NEXT: [ 7854600665770582568 ], hasStackArguments: false }
 define i32 @main() {
 entry:
   %fn = load ptr, ptr null, align 8

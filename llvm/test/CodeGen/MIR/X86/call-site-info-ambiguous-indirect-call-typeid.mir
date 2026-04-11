@@ -5,7 +5,7 @@
 # CHECK: name: ambiguous_caller
 # CHECK: callSites:
 # CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs: {{.*}}, calleeTypeIds:
-# CHECK-NEXT: [ 1234, 5678 ] }
+# CHECK-NEXT: [ 1234, 5678 ], hasStackArguments: false }
 
 --- |
   define ptr @ambiguous_caller() {
@@ -22,7 +22,7 @@
 ---
 name:            ambiguous_caller
 callSites:
-  - { bb: 0, offset: 1, fwdArgRegs: [], calleeTypeIds: [ 1234, 5678 ] }
+  - { bb: 0, offset: 1, fwdArgRegs: [], calleeTypeIds: [ 1234, 5678 ], hasStackArguments: false }
 body:             |
   bb.0.entry:
     %0:gr64 = MOV32ri64 4

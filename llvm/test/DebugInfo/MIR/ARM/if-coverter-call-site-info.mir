@@ -25,7 +25,8 @@
 # CHECK: callSites:
 # CHECK-NEXT: - { bb: {{.*}}, offset: {{.*}}, fwdArgRegs:
 # CHECK-NEXT:     - { arg: 0, reg: '$r0' }
-# CHECK-NEXT:     - { arg: 1, reg: '$r1' } }
+# CHECK-NEXT:     - { arg: 1, reg: '$r1' }, hasStackArguments:
+# CHECK-NEXT:   false }
 
 --- |
   ; ModuleID = 'if-convert-call-site-info.c'

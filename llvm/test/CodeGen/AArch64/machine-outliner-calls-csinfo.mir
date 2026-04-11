@@ -1,0 +1,166 @@
+# RUN: llc -mtriple=aarch64--- -emit-call-site-info -run-pass=machine-outliner -verify-machineinstrs %s -o - | FileCheck %s
+
+# Test that the machine outliner uses call site info to determine whether
+# a call passes arguments on the stack. This enables non-terminal outlining
+# of calls to external functions whose definitions are not visible.
+
+--- |
+  declare void @external_no_stack_args(i64) #0
+
+  declare void @external_with_stack_args(i64, i64, i64, i64, i64, i64, i64, i64, i64) #0
+
+  declare void @external_variadic(i64, ...) #0
+
+  define void @caller_csinfo_no_stack() #0 { ret void }
+
+  define void @caller_csinfo_stack() #0 { ret void }
+
+  define void @caller_csinfo_variadic() #0 { ret void }
+
+  attributes #0 = { noredzone nounwind }
+...
+---
+
+# Call site info says the external call has no stack arguments.
+# The BL should be outlined non-terminally (inside the outlined function).
+
+# CHECK-LABEL: name:            caller_csinfo_no_stack
+name:            caller_csinfo_no_stack
+tracksRegLiveness: true
+callSites:
+  - { bb: 1, offset: 0, fwdArgRegs: [], hasStackArguments: false }
+  - { bb: 1, offset: 4, fwdArgRegs: [], hasStackArguments: false }
+  - { bb: 1, offset: 8, fwdArgRegs: [], hasStackArguments: false }
+  - { bb: 1, offset: 12, fwdArgRegs: [], hasStackArguments: false }
+body:             |
+  bb.0:
+    liveins: $lr, $w8
+
+  ; CHECK-LABEL: bb.1:
+  ; CHECK-NOT: BL @external_no_stack_args
+  ; CHECK: BL @[[NOSTACK_FUNC:OUTLINED_FUNCTION_[0-9]+]]
+  bb.1:
+    BL @external_no_stack_args, implicit-def dead $lr, implicit $sp
+    $w17 = ORRWri $wzr, 1
+    $w17 = ORRWri $wzr, 1
+    $w0 = ORRWri $wzr, 4
+
+    BL @external_no_stack_args, implicit-def dead $lr, implicit $sp
+    $w17 = ORRWri $wzr, 1
+    $w17 = ORRWri $wzr, 1
+    $w0 = ORRWri $wzr, 3
+
+    BL @external_no_stack_args, implicit-def dead $lr, implicit $sp
+    $w17 = ORRWri $wzr, 1
+    $w17 = ORRWri $wzr, 1
+    $w0 = ORRWri $wzr, 2
+
+    BL @external_no_stack_args, implicit-def dead $lr, implicit $sp
+    $w17 = ORRWri $wzr, 1
+    $w17 = ORRWri $wzr, 1
+    $w0 = ORRWri $wzr, 1
+
+  bb.2:
+    RET undef $lr
+...
+---
+
+# Call site info says the external call has stack arguments.
+# The BL should only be outlinable as a terminator, so the outlined function
+# must NOT contain the BL itself.
+
+# CHECK-LABEL: name:            caller_csinfo_stack
+name:            caller_csinfo_stack
+tracksRegLiveness: true
+callSites:
+  - { bb: 1, offset: 0, fwdArgRegs: [], hasStackArguments: true }
+  - { bb: 1, offset: 4, fwdArgRegs: [], hasStackArguments: true }
+  - { bb: 1, offset: 8, fwdArgRegs: [], hasStackArguments: true }
+  - { bb: 1, offset: 12, fwdArgRegs: [], hasStackArguments: true }
+body:             |
+  bb.0:
+    liveins: $lr, $w8
+
+  ; CHECK-LABEL: bb.1:
+  ; CHECK: BL @external_with_stack_args
+  ; CHECK-NEXT: BL @[[STACK_FUNC:OUTLINED_FUNCTION_[0-9]+]]
+  bb.1:
+    BL @external_with_stack_args, implicit-def dead $lr, implicit $sp
+    $w16 = ORRWri $wzr, 2
+    $w16 = ORRWri $wzr, 2
+    $w0 = ORRWri $wzr, 4
+
+    BL @external_with_stack_args, implicit-def dead $lr, implicit $sp
+    $w16 = ORRWri $wzr, 2
+    $w16 = ORRWri $wzr, 2
+    $w0 = ORRWri $wzr, 3
+
+    BL @external_with_stack_args, implicit-def dead $lr, implicit $sp
+    $w16 = ORRWri $wzr, 2
+    $w16 = ORRWri $wzr, 2
+    $w0 = ORRWri $wzr, 2
+
+    BL @external_with_stack_args, implicit-def dead $lr, implicit $sp
+    $w16 = ORRWri $wzr, 2
+    $w16 = ORRWri $wzr, 2
+    $w0 = ORRWri $wzr, 1
+
+  bb.2:
+    RET undef $lr
+
+---
+
+# Call site info says the variadic call has no stack arguments at this call
+# site. The BL should be outlined non-terminally, even though the callee is
+# variadic. This is safe because call site info is per-call-site.
+
+# CHECK-LABEL: name:            caller_csinfo_variadic
+name:            caller_csinfo_variadic
+tracksRegLiveness: true
+callSites:
+  - { bb: 1, offset: 0, fwdArgRegs: [], hasStackArguments: false }
+  - { bb: 1, offset: 4, fwdArgRegs: [], hasStackArguments: false }
+  - { bb: 1, offset: 8, fwdArgRegs: [], hasStackArguments: false }
+  - { bb: 1, offset: 12, fwdArgRegs: [], hasStackArguments: false }
+body:             |
+  bb.0:
+    liveins: $lr, $w8
+
+  ; CHECK-LABEL: bb.1:
+  ; CHECK-NOT: BL @external_variadic
+  ; CHECK: BL @[[VARIADIC_FUNC:OUTLINED_FUNCTION_[0-9]+]]
+  bb.1:
+    BL @external_variadic, implicit-def dead $lr, implicit $sp
+    $w15 = ORRWri $wzr, 3
+    $w15 = ORRWri $wzr, 3
+    $w0 = ORRWri $wzr, 4
+
+    BL @external_variadic, implicit-def dead $lr, implicit $sp
+    $w15 = ORRWri $wzr, 3
+    $w15 = ORRWri $wzr, 3
+    $w0 = ORRWri $wzr, 3
+
+    BL @external_variadic, implicit-def dead $lr, implicit $sp
+    $w15 = ORRWri $wzr, 3
+    $w15 = ORRWri $wzr, 3
+    $w0 = ORRWri $wzr, 2
+
+    BL @external_variadic, implicit-def dead $lr, implicit $sp
+    $w15 = ORRWri $wzr, 3
+    $w15 = ORRWri $wzr, 3
+    $w0 = ORRWri $wzr, 1
+
+  bb.2:
+    RET undef $lr
+
+# The outlined function for variadic calls should contain the BL.
+# CHECK: name: [[VARIADIC_FUNC]]
+# CHECK: BL @external_variadic
+
+# The outlined function for no-stack-args calls should contain the BL.
+# CHECK: name: [[NOSTACK_FUNC]]
+# CHECK: BL @external_no_stack_args
+
+# The outlined function for stack-args calls should NOT contain the BL.
+# CHECK: name: [[STACK_FUNC]]
+# CHECK-NOT: BL @external_with_stack_args
