@@ -47,6 +47,11 @@ static cl::opt<int> HighLatencyCycles(
     cl::desc("Roughly estimate the number of cycles that 'long latency' "
              "instructions take for targets with no itinerary"));
 
+static cl::opt<bool> EnableCallSiteInfo(
+    "enable-call-site-info",
+    cl::desc("Enable call site info emission without the codegen option."),
+    cl::init(false));
+
 ScheduleDAGSDNodes::ScheduleDAGSDNodes(MachineFunction &mf)
     : ScheduleDAG(mf), InstrItins(mf.getSubtarget().getInstrItineraryData()) {}
 
@@ -888,7 +893,8 @@ EmitSchedule(MachineBasicBlock::iterator &InsertPos) {
 
     if (MI->isCandidateForAdditionalCallInfo()) {
       if (DAG->getTarget().Options.EmitCallSiteInfo ||
-          DAG->getTarget().Options.EmitCallGraphSection)
+          DAG->getTarget().Options.EmitCallGraphSection ||
+          EnableCallSiteInfo)
         MF.addCallSiteInfo(MI, DAG->getCallSiteInfo(Node));
 
       if (auto CalledGlobal = DAG->getCalledGlobal(Node))
