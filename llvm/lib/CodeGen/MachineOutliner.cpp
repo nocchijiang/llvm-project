@@ -56,6 +56,7 @@
 //===----------------------------------------------------------------------===//
 #include "llvm/CodeGen/MachineOutliner.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/Twine.h"
@@ -642,72 +643,100 @@ void MachineOutliner::emitOutlinedFunctionRemark(OutlinedFunction &OF) {
   MORE.emit(R);
 }
 
-struct MatchedEntry {
-  unsigned StartIdx;
-  unsigned EndIdx;
-  unsigned Count;
-  MatchedEntry(unsigned StartIdx, unsigned EndIdx, unsigned Count)
-      : StartIdx(StartIdx), EndIdx(EndIdx), Count(Count) {}
-  MatchedEntry() = delete;
+// A matched sequence (a terminal in the outlined hash tree) and the positions
+// in this module that matched it.
+struct MatchedGroup {
+  // (StartIdx, EndIdx) of each match, increasing and non-overlapping.
+  SmallVector<std::pair<unsigned, unsigned>, 2> Ranges;
+  // The matched terminal's occurrence count from the codegen data.
+  unsigned Count = 0;
 };
 
-// Find all matches in the global outlined hash tree.
+// Find all matches in the global outlined hash tree, grouped by the matched
+// sequence (terminal node) they reach.
 // It's quadratic complexity in theory, but it's nearly linear in practice
 // since the length of outlined sequences are small within a block.
-static SmallVector<MatchedEntry> getMatchedEntries(InstructionMapper &Mapper) {
+static SmallVector<MatchedGroup> getMatchedGroups(InstructionMapper &Mapper) {
   auto &InstrList = Mapper.InstrList;
   auto &UnsignedVec = Mapper.UnsignedVec;
-
-  SmallVector<MatchedEntry> MatchedEntries;
-  auto Size = UnsignedVec.size();
+  unsigned Size = UnsignedVec.size();
 
   // Get the global outlined hash tree built from the previous run.
   assert(cgdata::hasOutlinedHashTree());
-  auto *Tree = cgdata::getOutlinedHashTree();
+  const auto *Tree = cgdata::getOutlinedHashTree();
   auto RootCursor = Tree->getRootCursor();
 
-  auto getValidInstr = [&](unsigned Index) -> const MachineInstr * {
-    if (UnsignedVec[Index] >= Mapper.LegalInstrNumber)
-      return nullptr;
-    return &(*InstrList[Index]);
-  };
-
-  auto getStableHashAndFollow =
-      [Tree](const MachineInstr &MI,
-             const OutlinedHashTree::HashNodeCursor &CurrNode)
-      -> std::optional<OutlinedHashTree::HashNodeCursor> {
-    stable_hash StableHash = stableHashValue(MI);
-    if (!StableHash)
-      return std::nullopt;
-    return CurrNode.getSuccessor(*Tree, StableHash);
-  };
-
+  // Hash each mappable instruction once; the walk below visits each many times.
+  SmallVector<stable_hash> Hashes(Size, stable_hash(0));
   for (unsigned I = 0; I < Size; ++I) {
-    const MachineInstr *MI = getValidInstr(I);
-    if (!MI || MI->isDebugInstr())
+    if (UnsignedVec[I] >= Mapper.LegalInstrNumber)
       continue;
-    auto CurrNode = getStableHashAndFollow(*MI, RootCursor);
+    Hashes[I] = stableHashValue(*InstrList[I]);
+  }
+
+  // Group matches by the terminal node they reach.
+  SmallVector<MatchedGroup> Groups;
+  DenseMap<OutlinedHashTree::HashNodeCursor, unsigned> TerminalToGroup;
+  for (unsigned I = 0; I < Size; ++I) {
+    if (!Hashes[I])
+      continue;
+    auto CurrNode = RootCursor.getSuccessor(*Tree, Hashes[I]);
     if (!CurrNode)
       continue;
-
     for (unsigned J = I + 1; J < Size; ++J) {
-      const MachineInstr *MJ = getValidInstr(J);
-      if (!MJ)
+      if (!Hashes[J])
         break;
-      // Skip debug instructions as we did for the outlined function.
-      if (MJ->isDebugInstr())
-        continue;
-      CurrNode = getStableHashAndFollow(*MJ, *CurrNode);
+      CurrNode = CurrNode->getSuccessor(*Tree, Hashes[J]);
       if (!CurrNode)
         break;
       // Even with a match ending with a terminal, we continue finding
       // matches to populate all candidates.
-      if (auto Count = CurrNode->getTerminals(*Tree))
-        MatchedEntries.emplace_back(I, J, *Count);
+      if (auto Count = CurrNode->getTerminals(*Tree)) {
+        auto [It, Inserted] =
+            TerminalToGroup.try_emplace(*CurrNode, Groups.size());
+        if (Inserted) {
+          Groups.emplace_back();
+          Groups.back().Count = *Count;
+        }
+        Groups[It->second].Ranges.emplace_back(I, J);
+      }
     }
   }
 
-  return MatchedEntries;
+  // Partition each group by the mapper's exact equivalence and drop
+  // overlapping matches.
+  auto SameSequence = [&](std::pair<unsigned, unsigned> A,
+                          std::pair<unsigned, unsigned> B) {
+    if (A.second - A.first != B.second - B.first)
+      return false;
+    for (unsigned IA = A.first, IB = B.first; IA <= A.second; ++IA, ++IB)
+      if (UnsignedVec[IA] != UnsignedVec[IB])
+        return false;
+    return true;
+  };
+  SmallVector<MatchedGroup> Result;
+  Result.reserve(Groups.size());
+  for (const auto &G : Groups) {
+    SmallVector<unsigned, 2> Parts;
+    for (const auto &Range : G.Ranges) {
+      auto *PartIt = llvm::find_if(Parts, [&](unsigned P) {
+        return SameSequence(Result[P].Ranges.front(), Range);
+      });
+      if (PartIt == Parts.end()) {
+        Parts.push_back(Result.size());
+        Result.emplace_back();
+        Result.back().Count = G.Count;
+        Result.back().Ranges.push_back(Range);
+        continue;
+      }
+      auto &Part = Result[*PartIt];
+      // Drop matches that overlap an earlier one in this partition; overlaps
+      // across sequences are resolved later in outline().
+      if (Range.first > Part.Ranges.back().second)
+        Part.Ranges.push_back(Range);
+    }
+  }
+  return Result;
 }
 
 void MachineOutliner::findGlobalCandidates(
@@ -717,28 +746,26 @@ void MachineOutliner::findGlobalCandidates(
   auto &InstrList = Mapper.InstrList;
   auto &MBBFlagsMap = Mapper.MBBFlagsMap;
 
-  std::vector<Candidate> CandidatesForRepeatedSeq;
-  for (auto &ME : getMatchedEntries(Mapper)) {
-    CandidatesForRepeatedSeq.clear();
-    MachineBasicBlock::iterator StartIt = InstrList[ME.StartIdx];
-    MachineBasicBlock::iterator EndIt = InstrList[ME.EndIdx];
-    auto Length = ME.EndIdx - ME.StartIdx + 1;
-    MachineBasicBlock *MBB = StartIt->getParent();
-    CandidatesForRepeatedSeq.emplace_back(ME.StartIdx, Length, StartIt, EndIt,
-                                          MBB, FunctionList.size(),
-                                          MBBFlagsMap[MBB]);
+  std::vector<Candidate> CandidatesForSeq;
+  for (auto &MG : getMatchedGroups(Mapper)) {
+    CandidatesForSeq.clear();
+    for (auto [StartIdx, EndIdx] : MG.Ranges) {
+      MachineBasicBlock::iterator StartIt = InstrList[StartIdx];
+      MachineBasicBlock::iterator EndIt = InstrList[EndIdx];
+      MachineBasicBlock *MBB = StartIt->getParent();
+      CandidatesForSeq.emplace_back(StartIdx, EndIdx - StartIdx + 1, StartIt,
+                                    EndIt, MBB, FunctionList.size(),
+                                    MBBFlagsMap[MBB]);
+    }
     const TargetInstrInfo *TII =
-        MBB->getParent()->getSubtarget().getInstrInfo();
+        CandidatesForSeq[0].getMF()->getSubtarget().getInstrInfo();
     unsigned MinRepeats = 1;
     std::optional<std::unique_ptr<OutlinedFunction>> OF =
-        TII->getOutliningCandidateInfo(*MMI, CandidatesForRepeatedSeq,
-                                       MinRepeats);
+        TII->getOutliningCandidateInfo(*MMI, CandidatesForSeq, MinRepeats);
     if (!OF.has_value() || OF.value()->Candidates.empty())
       continue;
-    // We create a global candidate for each match.
-    assert(OF.value()->Candidates.size() == MinRepeats);
     FunctionList.emplace_back(std::make_unique<GlobalOutlinedFunction>(
-        std::move(OF.value()), ME.Count));
+        std::move(OF.value()), MG.Count));
   }
 }
 

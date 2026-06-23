@@ -71,9 +71,17 @@ public:
     LLVM_ABI std::optional<unsigned>
     getTerminals(const OutlinedHashTree &Tree) const;
 
+    explicit operator bool() const { return BlockOffset != InvalidHandle; }
+
   private:
     friend class OutlinedHashTree;
-    HashNodeCursor(const HashNode *N) : Node(N) {}
+    friend struct DenseMapInfo<HashNodeCursor>;
+    static constexpr uint64_t InvalidHandle = ~uint64_t(0);
+    static_assert(sizeof(uint64_t) >= sizeof(const HashNode *),
+                  "uint64_t must be wide enough to hold a node handle");
+    HashNodeCursor() : BlockOffset(InvalidHandle) {}
+    // Zero-fill via BlockOffset first to ensure correctness on 32-bit hosts.
+    HashNodeCursor(const HashNode *N) : BlockOffset(0) { Node = N; }
     HashNodeCursor(uint64_t BlockOffset) : BlockOffset(BlockOffset) {}
 
     // A single node handle: an in-memory HashNode pointer or a byte offset
@@ -84,6 +92,8 @@ public:
       uint64_t BlockOffset;
     };
   };
+
+  static const HashNodeCursor InvalidCursor;
 
   /// Construct a tree read in place from a mapped blob: its block region begins
   /// at \p BlockBase (the root block at its offset 0) inside \p Buffer, which
@@ -170,6 +180,19 @@ public:
 
   /// \returns the depth of a OutlinedHashTree by traversing it.
   LLVM_ABI size_t depth() const;
+};
+
+inline const OutlinedHashTree::HashNodeCursor OutlinedHashTree::InvalidCursor;
+
+template <> struct DenseMapInfo<OutlinedHashTree::HashNodeCursor> {
+  using Cursor = OutlinedHashTree::HashNodeCursor;
+  static Cursor getEmptyKey() { return OutlinedHashTree::InvalidCursor; }
+  static unsigned getHashValue(const Cursor &C) {
+    return llvm::DenseMapInfo<uint64_t>::getHashValue(C.BlockOffset);
+  }
+  static bool isEqual(const Cursor &A, const Cursor &B) {
+    return A.BlockOffset == B.BlockOffset;
+  }
 };
 
 } // namespace llvm

@@ -1,8 +1,7 @@
 ; This test is similar to cgdata-read-double-outline.ll, but it is executed with LTO (Link Time Optimization).
 ; It demonstrates how identical instruction sequences are handled during global outlining.
-; Currently, we do not attempt to reuse an outlined function for identical sequences.
-; Instead, each instruction sequence that appears in the global outlined hash tree
-; is outlined into its own unique function.
+; Identical sequences that match against the global outlined hash tree are grouped,
+; so they share a single outlined function instead of each being outlined separately.
 
 ; RUN: split-file %s %t
 
@@ -21,12 +20,11 @@
 
 ; Now, we execute either ThinLTO or LTO by reading the cgdata for local-two-another.ll.
 ; With ThinLTO, similar to the no-LTO scenario shown in cgdata-read-double-outline.ll,
-; it optimistically outlines each instruction sequence that matches against
-; the global outlined hash tree. Since each matching sequence is considered a candidate,
-; we expect to generate two unique outlined functions that will be folded
-; by the linker at a later stage.
-; However, with LTO, we do not utilize the cgdata, but instead fall back to the default
-; outliner mode. This results in a single outlined function that is
+; it outlines the sequences that match against the global outlined hash tree. The two
+; matching sequences are identical, so they are grouped and share a single outlined
+; function.
+; With LTO, we do not utilize the cgdata, but instead fall back to the default
+; outliner mode. This also results in a single outlined function that is
 ; shared across two call-sites.
 
 ; Run ThinLTO
@@ -40,10 +38,7 @@
 ; CHECK-NEXT:  mov
 ; CHECK-NEXT:  mov
 ; CHECK-NEXT:  b
-; CHECK: _OUTLINED_FUNCTION_{{.*}}:
-; CHECK-NEXT:  mov
-; CHECK-NEXT:  mov
-; CHECK-NEXT:  b
+; CHECK-NOT: _OUTLINED_FUNCTION_{{.*}}:
 
 ; Run ThinLTO while disabling the global outliner.
 ; We have a single outlined case with the default outliner.

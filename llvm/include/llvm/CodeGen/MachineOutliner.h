@@ -287,22 +287,27 @@ struct GlobalOutlinedFunction : public OutlinedFunction {
   unsigned GlobalOccurrenceCount;
 
   /// Return the number of times that appear globally.
-  /// Global outlining candidate is uniquely created per each match, but this
-  /// might be erased out when it's overlapped with the previous outlining
-  /// instance.
+  /// A global outlining candidate set is created per matched sequence, with
+  /// all of its local candidates attached, but candidates might be erased out
+  /// when overlapped with a previous outlining instance. The local candidate
+  /// count floors the global count: the sequence demonstrably occurs at least
+  /// that many times even if the (possibly stale) codegen data undercounts it.
   unsigned getOccurrenceCount() const override {
-    assert(Candidates.size() <= 1);
-    return Candidates.empty() ? 0 : GlobalOccurrenceCount;
+    if (Candidates.empty())
+      return 0;
+    return GlobalOccurrenceCount > Candidates.size() ? GlobalOccurrenceCount
+                                                     : Candidates.size();
   }
 
-  /// Return the outlining cost using the global occurrence count
-  /// with the same cost as the first (unique) candidate.
+  /// Return the outlining cost using the global occurrence count.
+  /// Call overheads can differ per candidate, so sum the actual local
+  /// overheads and extrapolate their average to the global occurrence count.
   unsigned getOutliningCost() const override {
-    assert(Candidates.size() <= 1);
-    unsigned CallOverhead =
-        Candidates.empty()
-            ? 0
-            : Candidates[0].getCallOverhead() * getOccurrenceCount();
+    uint64_t CallOverhead = 0;
+    for (const Candidate &C : Candidates)
+      CallOverhead += C.getCallOverhead();
+    if (!Candidates.empty() && GlobalOccurrenceCount > Candidates.size())
+      CallOverhead = CallOverhead * GlobalOccurrenceCount / Candidates.size();
     return CallOverhead + SequenceSize + FrameOverhead;
   }
 

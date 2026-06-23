@@ -4,17 +4,13 @@
 ; object file and merged into the codegen data summary.
 ; The second round utilizes the merged codegen data to optimistically outline a
 ; singleton instance in thin-one.ll.
-; Note that this global outlining creates a unique instance for each sequence
-; without directly sharing identical functions for correctness.
-; Actual code size reductions occur at link time through identical code folding.
 ; When both thinlto and lto modules are compiled, the lto module is processed
 ; independently, without relying on the merged codegen data. In this case,
 ; the identical code sequences are directly replaced by a common outlined function.
 
 ; RUN: split-file %s %t
 
-; Verify each outlining instance is singleton with the global outlining for thinlto.
-; They will be identical, which can be folded by the linker with ICF.
+; Verify the global outlining for thinlto groups identical sequences in a module.
 ; RUN: opt -module-summary %t/thin-one.ll -o %t/thin-one.bc
 ; RUN: opt -module-summary %t/thin-two.ll -o %t/thin-two.bc
 ; RUN: llvm-lto2 run %t/thin-one.bc %t/thin-two.bc -o %t/thinlto \
@@ -29,16 +25,14 @@
 ; THINLTO-1-NEXT:  mov
 ; THINLTO-1-NEXT:  b
 
-; thin-two.ll will have two respective outlining instances (matched in the global outlined hash tree)
+; thin-two.ll has two identical sequences (matched in the global outlined hash
+; tree) that are grouped into a single shared outlining instance.
 ; RUN: llvm-objdump -d %t/thinlto.2 | FileCheck %s --check-prefix=THINLTO-2
 ; THINLTO-2: _OUTLINED_FUNCTION{{.*}}>:
 ; THINLTO-2-NEXT:  mov
 ; THINLTO-2-NEXT:  mov
 ; THINLTO-2-NEXT:  b
-; THINLTO-2: _OUTLINED_FUNCTION{{.*}}>:
-; THINLTO-2-NEXT:  mov
-; THINLTO-2-NEXT:  mov
-; THINLTO-2-NEXT:  b
+; THINLTO-2-NOT: _OUTLINED_FUNCTION{{.*}}>:
 
 ; Now add a lto module to the above thinlto modules.
 ; Verify the lto module is optimized independent of the global outlining for thinlto.
@@ -59,7 +53,7 @@
 ; thin-one.ll will have one outlining instance (matched in the global outlined hash tree)
 ; RUN: llvm-objdump -d %t/out.1 | FileCheck %s --check-prefix=THINLTO-1
 
-; thin-two.ll will have two outlining instances (matched in the global outlined hash tree)
+; thin-two.ll has a single shared outlining instance for its two identical sequences
 ; RUN: llvm-objdump -d %t/out.2 | FileCheck %s --check-prefix=THINLTO-2
 
 ;--- thin-one.ll

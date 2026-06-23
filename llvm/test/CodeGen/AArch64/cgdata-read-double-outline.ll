@@ -1,7 +1,6 @@
 ; This test demonstrates how identical instruction sequences are handled during global outlining.
-; Currently, we do not attempt to share an outlined function for identical sequences.
-; Instead, each instruction sequence that matches against the global outlined hash tree
-; is outlined into its own unique function.
+; Identical sequences that match against the global outlined hash tree are grouped,
+; so they share a single outlined function instead of each being outlined separately.
 
 ; RUN: split-file %s %t
 
@@ -15,11 +14,9 @@
 ; SHOW-NEXT:  Terminal Node Count: 1
 ; SHOW-NEXT:  Depth: 3
 
-; Now, we read the cgdata for local-two-another.ll and proceed to optimistically outline
-; each instruction sequence that matches against the global outlined hash tree.
-; Since each matching sequence is considered a candidate, we expect to generate two
-; unique outlined functions. These functions, although unique, will be identical in code,
-; and thus, will be folded by the linker.
+; Now, we read the cgdata for local-two-another.ll and outline the sequences that
+; match against the global outlined hash tree. The two matching sequences are
+; identical, so they are grouped and share a single outlined function.
 
 ; RUN: llc -mtriple=arm64-apple-darwin -enable-machine-outliner -codegen-data-use-path=%t_cgdata -filetype=obj %t/local-two-another.ll -o %t_read
 ; RUN: llvm-objdump -d %t_read | FileCheck %s
@@ -33,11 +30,7 @@
 ; CHECK-NEXT:  mov
 ; CHECK-NEXT:  mov
 ; CHECK-NEXT:  b
-
-; CHECK: _OUTLINED_FUNCTION_{{.*}}:
-; CHECK-NEXT:  mov
-; CHECK-NEXT:  mov
-; CHECK-NEXT:  b
+; CHECK-NOT: _OUTLINED_FUNCTION_{{.*}}:
 
 ;--- local-two.ll
 declare i32 @g(i32, i32, i32)

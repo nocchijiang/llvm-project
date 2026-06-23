@@ -7,8 +7,7 @@
 ; RUN: split-file %s %t
 
 ; 0. Base case without a cache.
-; Verify each outlining instance is singleton with the global outlining for thinlto.
-; They will be identical, which can be folded by the linker with ICF.
+; Verify the global outlining for thinlto groups identical sequences in a module.
 ; RUN: opt -module-hash -module-summary %t/thin-one.ll -o %t/thin-one.bc
 ; RUN: opt -module-hash -module-summary %t/thin-two.ll -o %t/thin-two.bc
 ; RUN: llvm-lto2 run %t/thin-one.bc %t/thin-two.bc -o %t/thinlto \
@@ -23,16 +22,14 @@
 ; THINLTO-1-NEXT:  mov
 ; THINLTO-1-NEXT:  b
 
-; thin-two.ll will have two outlining instances (matched in the global outlined hash tree)
+; thin-two.ll has two identical sequences (matched in the global outlined hash
+; tree) that are grouped into a single shared outlining instance.
 ; RUN: llvm-objdump -d %t/thinlto.2 | FileCheck %s --check-prefix=THINLTO-2
 ; THINLTO-2: _OUTLINED_FUNCTION{{.*}}>:
 ; THINLTO-2-NEXT:  mov
 ; THINLTO-2-NEXT:  mov
 ; THINLTO-2-NEXT:  b
-; THINLTO-2: _OUTLINED_FUNCTION{{.*}}>:
-; THINLTO-2-NEXT:  mov
-; THINLTO-2-NEXT:  mov
-; THINLTO-2-NEXT:  b
+; THINLTO-2-NOT: _OUTLINED_FUNCTION{{.*}}>:
 
 ; 1. Run this with a cache for the first time.
 ; RUN: rm -rf %t.cache
@@ -106,18 +103,15 @@
 ; RUN: llvm-objdump -d %t/thinlto-warm-modified-all.1 | FileCheck %s --check-prefix=THINLTO-1-MODIFIED-ALL
 ; THINLTO-1-MODIFIED-ALL-NOT: _OUTLINED_FUNCTION{{.*}}>:
 
-; thin-two-modified.ll will have two (longer) outlining instances (matched in the global outlined hash tree)
+; thin-two-modified.ll has two identical sequences that are grouped into a single
+; (longer) shared outlining instance.
 ; RUN: llvm-objdump -d %t/thinlto-warm-modified-all.2| FileCheck %s --check-prefix=THINLTO-2-MODIFIED-ALL
 ; THINLTO-2-MODIFIED-ALL: _OUTLINED_FUNCTION{{.*}}>:
 ; THINLTO-2-MODIFIED-ALL:  mov
 ; THINLTO-2-MODIFIED-ALL:  mov
 ; THINLTO-2-MODIFIED-ALL:  mov
 ; THINLTO-2-MODIFIED-ALL:  b
-; THINLTO-2-MODIFIED-ALL: _OUTLINED_FUNCTION{{.*}}>:
-; THINLTO-2-MODIFIED-ALL:  mov
-; THINLTO-2-MODIFIED-ALL:  mov
-; THINLTO-2-MODIFIED-ALL:  mov
-; THINLTO-2-MODIFIED-ALL:  b
+; THINLTO-2-MODIFIED-ALL-NOT: _OUTLINED_FUNCTION{{.*}}>:
 
 ; 5. Re-running it will hit the cache.
 ; RUN: llvm-lto2 run %t/thin-one.bc %t/thin-two.bc -o %t/thinlto-warm-again \
